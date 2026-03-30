@@ -1,0 +1,261 @@
+《“幻影卷轴” 2.5D 影视化工业生产线 —— 模块化软件需求说明书 (SRS)》**。
+这份说明书采用了**“微服务架构” (Microservices Architecture)** 的思想。全套系统被拆解为 8 个完全独立的模块（程序）。每个模块都有明确的输入 (Input) 和 输出 (Output)。
+
+🎬 “幻影卷轴” 核心架构总览
+通信方式：各模块之间不直接耦合，统一通过本地文件夹中的 JSON 文件和多媒体文件进行数据传递。
+开发语言推荐：Python 3.10+
+核心理念：音频时长驱动视频长度（Audio-Anchor Sync），阶段性人工审核（Milestone Gates）。
+📦 模块 1：数据采集与预处理中心 (Source_Ingester)
+定位： 独立的数据获取爬虫与文本清理工具。
+输入 (Input)：
+目标网站 URL（维基文库、古登堡计划等）或 本地 TXT/EPUB/pdf 文件。
+用户指定的章节范围。
+处理逻辑 (Process)：
+爬虫抓取：使用 BeautifulSoup 或 Scrapy 抓取公开版权网站文本。
+清洗过滤：去除 HTML 标签、多余换行、网站声明等冗余信息。
+分块打包：将长文本按逻辑段落（约 2000 字/块）切分。
+输出 (Output)：
+raw_source.json（包含：书名、作者、章节名、纯净文本列表）。
+AI 编码指令建议：“请写一个 Python 爬虫模块，支持输入维基文库的 URL，提取正文内容并保存为标准 JSON 格式。”
+📦 模块 2：总导演引擎 - 世界观与骨架生成 (Director_Engine)
+定位： 调用硅基流动中的大模型（deepseek-ai/DeepSeek-R1-0528-Qwen3-8B、DeepSeek-V2.5、Pro/deepseek-ai/DeepSeek-V3.2）进行高维度改编和全局规约设定。
+输入 (Input)：
+raw_source.json
+风格配置参数（例如：Style="伪纪录片_异星惊悚"、伪纪录片_克苏鲁、赛博朋克、废土、探险、黑帮等等二三十种流行风格）
+处理逻辑 (Process)：
+调用 LLM API，将原著提取并“同构映射”到设定风格。
+生成**《角色视觉字典》**（提取不可篡改的英文 Prompt 锚点）。
+生成**《单集节拍表 (Beat Sheet)》**（将小说拆分为 N 个镜头的物理骨架）。
+输出 (Output)：
+project_bible.json（全局世界观与角色 DNA）。
+beat_sheet.json（包含每个节拍的时间节点、情绪值、任务）。
+AI 编码指令建议：“请写一个 Python 脚本，读取 JSON 文本，调用 SiliconFlow 的 DeepSeek-V2.5 API，使用提供的 System Prompt，强制输出严格包含世界观和节拍表的 JSON 结构。”
+📦 模块 3：执笔编剧引擎 - 剧本膨胀与台账管理 (Writer_Engine)
+定位： 调用推理小模型（deepseek-ai/DeepSeek-R1-0528-Qwen3-8B、qwen/qwen3-8B）将骨架丰满为具体的分镜、台词和生图提示词。
+输入 (Input)：
+project_bible.json + beat_sheet.json
+处理逻辑 (Process)：
+按照节拍表循环推理。
+生成观察者旁白（严格遵守选定风格/非人称观测者规则）。
+生成角色对白。
+生成Kolors 生图英文 Prompt（必须从 project_bible 中继承角色特征词）。
+打上音效与特效标签（如 [SFX: metallic_echo], [VFX: glitch]）。
+实时更新并保存 production_ledger.json（状态台账，记录人物当前血量/位置）。
+输出 (Output)：
+master_script.json（包含几十个分镜对象的完整剧本数组）。
+AI 编码指令建议：“请写一个基于上下文滚动的 LLM 调用脚本，每次读取上一拍的状态台账，生成下一个场景的分镜 JSON，并更新状态台账。”
+📦 模块 4：音频锚点工坊 (Audio_Anchor_Forge)
+定位： 最关键的时序控制器，生成所有音频并反向测算视频时长。
+输入 (Input)：
+master_script.json
+处理逻辑 (Process)：
+TTS 旁白与台词：调用 Edge-TTS 或云端声音克隆 API，按角色分配音色生成 .wav。
+音效下载：解析剧本中的 SFX 标签，通过 Freesound.org API 自动搜索下载无版权音效。
+时长测算核心：使用 librosa 或 pydub 获取每个分镜对应音频的精确物理时长（精确到毫秒）。
+回写时长数据：将时长参数补全到剧本 JSON 中。
+输出 (Output)：
+/audio/ 文件夹（包含所有生成的 wav/mp3）。
+timed_script.json（带有 duration_ms 参数的最终剧本）。
+AI 编码指令建议：“请写一个程序，解析剧本 JSON，调用 Edge-TTS 生成音频存入目录，并利用 freesound API 下载对应音效，最后计算音频时长并写回 JSON。”
+📦 模块 5：视觉资产铸造厂 (Visual_Asset_Foundry)
+定位： 图像与深度图生成的批处理车间。
+输入 (Input)：
+timed_script.json
+处理逻辑 (Process)：
+场景图生成：解析剧本中的英文 Prompt，调用硅基流动 Kwai-Kolors/Kolors API。内置重试机制（遇到限流 429 自动挂起等待）。
+深度图生成：调用开源深度估算模型（如本地部署的 Depth-Anything-V2），为每一张生成的 Kolors RGB 图生成对应的灰度深度图（Depth Map）。
+海报生成：提取剧本高潮 Prompt，单独调用 Kolors 高画质模式生成一张预留排版空间的封面基图。
+输出 (Output)：
+/visuals/ 文件夹（包含成对的 scene_01_rgb.png 和 scene_01_depth.png）。
+raw_poster.png。
+AI 编码指令建议：“编写一个包含异步请求和 429 自动排队重试机制的图片生成脚本，并使用 Depth-Anything 生成对应的深度图。”
+📦 模块 6：2.5D 动态渲染与合成器 (2.5D_Render_Engine)
+定位： 后期特效室，将静态图变为具有呼吸感和特效的视频流。
+输入 (Input)：
+/audio/, /visuals/, timed_script.json
+处理逻辑 (Process)：
+视差动画渲染：基于 RGB 图和 Depth 图，结合 timed_script 中的时长参数，使用 OpenGL/WebGL 或 Python 图像库（如 MoviePy / OpenCV）生成推拉平移的 2.5D 视频片段。
+特效叠加：根据 JSON 中的 VFX 标签，叠加一层透明 MP4 遮罩（如闪电、噪点、老电影划痕）。
+音画合成：将 2.5D 视频片段与旁白、对白、Freesound 音效按时间戳对齐混音。
+输出 (Output)：
+final_render_zh.mp4（中文无字幕原片）。
+AI 编码指令建议：“请使用 Python（可结合 FFmpeg）编写一个脚本，接收图片、深度图和音频，生成一段带有 Z 轴视差推拉效果的 mp4 视频，长度严格等于音频长度。”
+📦 模块 7：全球化分发与封装模块 (Global_Distributor)
+定位： 多语种处理、海报压字与 YouTube 自动上传。
+输入 (Input)：
+final_render_zh.mp4, timed_script.json, raw_poster.png
+处理逻辑 (Process)：
+翻译与多音轨：调用 LLM 翻译台词，调用 TTS 生成英/日语等多语种独立音频文件（track_en.m4a 等）。
+海报压制：使用 Pillow 库，在 raw_poster.png 上采用海报构图法（大对比度字体、发光特效）叠加多语种标题。
+字幕生成：生成 .srt 或 .vtt 多语种字幕文件。
+YouTube API 对接：通过 OAuth2.0 将视频作为“非公开 (Unlisted)”上传，上传多语种音轨、字幕，填充 SEO 标签和海报缩略图。
+输出 (Output)：
+海外版资源包，及最终的 YouTube 链接。
+AI 编码指令建议：“请写一个脚本，利用 Google API Client 上传视频至 YouTube，设置为 Unlisted，并附加自定义缩略图和 SRT 字幕文件。”
+🎛️ 模块 8：中央总控台与审核中枢 (Master_Hub_CLI / WebUI)
+定位： 这是您本人的“监工台”，把上面 7 个模块串联起来，并设置人工审核暂停点。
+执行逻辑 (Orchestration)：
+运行 模块 1 -> 运行 模块 2。
+🛑 【关口 1 暂停】 -> TTS 播报：“世界观与大纲已生成，请审核 project_bible.json。” 用户按回车确认。
+运行 模块 3 -> 模块 4 -> 模块 5。
+🛑 【关口 2 暂停】 -> TTS 播报：“剧本、音频、分镜图已全部生成。请审核。” （用户可在本地修改某张图或某句语音，替换同名文件即可）。用户按回车确认。
+运行 模块 6。
+🛑 【关口 3 暂停】 -> 弹窗播放 final_render_zh.mp4，TTS 播报：“中文母带渲染完毕，是否执行全球化分发？”
+运行 模块 7。完毕。
+🚀 如何使用这份说明书开始工作？
+这 8 个模块彼此之间没有任何代码依赖，完全解耦。
+您可以先不开动庞大的视频渲染，直接建立一个文件夹，把这份说明书的 【模块 2】 发给 AI，让它先写出调用 API 设计世界观的脚本。
+建议的开发顺序：
+先开发 模块2（导演） 和 模块3（编剧）。只要这两个纯文本处理引擎跑通了，能稳定输出结构完美的 JSON，后续的视听渲染只不过是对 JSON 数据的机械化执行而已。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+以下是专为“幻影卷轴”设计的抗熵增数据工程方案：
+一、 核心准则：分离“不可变资产”与“可变状态”
+流水线中的数据必须被严格分为两类，采用不同的生命周期管理：
+不可变资产 (Immutable Assets)：
+内容：角色的视觉 DNA、宇宙底层物理规律、场景的基础环境描述。
+存储：project_bible.json。
+抗衰减策略：只读不写。在 20 分钟的生成过程中，8B 编剧绝对没有权限修改这个文件。这就锁死了系统的信息下限。
+可变状态 (Mutable State)：
+内容：角色的血量、理智值、当前位置、手中道具。
+存储：state_ledger.json。
+抗熵增策略：增量更新，全量覆写。每一个节拍（Beat）生成后，状态机必须被覆盖为最新状态。
+二、 数据存储与传递的最佳格式：Pydantic 驱动的强类型 JSON
+不要让大模型输出松散的文本，也不要手写正则去提取。必须使用 JSON 格式，并在 Python 代码中使用 Pydantic 库进行强制类型校验。
+1. 为什么用 JSON + Pydantic？
+如果 8B 模型输出的情绪是 "Mood": "有点害怕"，系统会崩溃。
+通过 Pydantic，我们可以定义枚举类型（Enum）：Mood 只能是 ["Calm", "Tension", "Horror", "Action"] 中的一个。如果模型输出乱码，Pydantic 会直接报错，触发重试。这种**“格式上的独裁”**是阻断熵增的物理隔离墙。
+2. “指针引用”代替“文本重复”（解决视觉特征衰减）
+这是防止 Kolors 画错人的终极绝招。
+错误做法（会导致衰减）：
+让 8B 每次自己写生图提示词："画一个穿着防护服的男人倒在地上"。（它忘了写编号和疤痕）。
+正确做法（指针引用）：
+剧本 JSON 中只存 ID：
+code
+JSON
+{
+  "scene_id": "S_012",
+  "characters_present":["CHAR_WANG_01", "CHAR_YINGNING_01"],
+  "action_description": "lying on the ground, struggling"
+}
+合成逻辑：Python 脚本在调用 Kolors 前，会去 project_bible.json 中查找 CHAR_WANG_01 的固定指纹（"Young man, purple scar..."），然后像拼乐高一样，用代码把它们拼成最终的 Prompt。
+结果：无论大模型怎么忘事，底层代码永远把最精准的视觉特征塞进生图引擎，视觉信息衰减率降为 0。
+三、 抗熵增上下文传递策略 (Sliding Window Context)
+在生产第 15 分钟的剧本时，如果把前 14 分钟的剧本全喂给 8B 模型，不仅会爆显存，还会引发严重的“注意力分散”（熵增）。
+传递给 8B 编剧的数据包必须被严格裁剪为 4 块（Context 组装）：
+系统指令区 (System Prompt)：固定载入“伪纪录片风格观察者台词准则”。
+全局常量区 (Global Anchors)：只载入当前出场人物的名字和核心性格（不载入视觉描述，视觉由代码通过 ID 拼接）。
+动态状态机 (Current Ledger)：载入上一拍结束时的状态（如：王某，理智40%，手无寸铁）。
+滑动剧情窗口 (Sliding Window)：只给它看最近的 3 个分镜（Scene N-3, N-2, N-1），外加总导演给的第 N 拍的大纲。
+逻辑结论：大模型不需要知道第 1 分钟发生了什么，它只需要知道“上一秒我在哪、什么状态”，以及“导演要我这一秒干什么”。这彻底切断了长文本带来的混沌。
+四、 核心数据文件结构示例 (JSON Schema)
+这三个文件就是贯穿您 8 个模块的“血液”。
+1. project_bible.json (静态宪法库)
+由 V2.5 生成后即锁定，后续只读。
+code
+JSON
+{
+  "project_id": "YN_SciFi_001",
+  "style_matrix": {
+    "visual_lut": "cyberpunk_horror",
+    "narrator_voice_id": "zh-CN-YunzeNeural"
+  },
+  "entities": {
+    "CHAR_WANG_01": {
+      "name": "王子服",
+      "visual_prompt_lock": "silver-grey mechanical suit #SF-012, purple scar on left cheek, exhausted face",
+      "audio_tts_id": "zh-CN-YunxiNeural"
+    }
+  }
+}
+2. state_ledger.json (动态状态机)
+像游戏存档一样，每个 Scene 结束后更新并保存快照（解决您之前提到的“回滚”问题，只需要读取上一分钟的 JSON 即可）。
+code
+JSON
+{
+  "current_time_ms": 124500,
+  "active_scene": "SCENE_004",
+  "entity_states": {
+    "CHAR_WANG_01": {
+      "sanity_level": 45,
+      "inventory":["broken_helmet"],
+      "posture": "kneeling"
+    }
+  },
+  "environment_state": {
+    "location": "Mars_Market_Zone_B",
+    "threat_level": "High"
+  }
+}
+3. master_script.json (生产流水线轨道)
+最终渲染引擎只读这个文件，它是图、音、文的高度结构化集合。
+code
+Json[
+{
+    "scene_id": "S_004",
+    "duration_ms": 4200, 
+    "camera_move": "Z_Dolly_In_Slow",
+    "vfx_layers":["Film_Grain", "Glitch_Light"],
+    "audio_tracks":[
+      {
+        "type": "narrator",
+        "text": "信号源在靠近。生物雷达显示其质量为负。",
+        "file_path": "/audio/nar_S004.wav"
+      },
+      {
+        "type": "sfx",
+        "tags": ["low_frequency_drone", "heartbeat"],
+        "file_path": "/audio/sfx_S004.wav"
+      }
+    ],
+    "visual_render": {
+      "base_prompt": "kneeling in the dark, neon lights flickering",
+      "entity_ids": ["CHAR_WANG_01"],
+      "image_path": "/visuals/S004_rgb.png",
+      "depth_path": "/visuals/S004_depth.png"
+    }
+  }
+]
+五、 人机交互界面的“降熵”处理 (YAML 呈现)
+虽然 JSON 对机器最友好，但对于您在 【审核关口】 进行人工查阅时，嵌套的 JSON 会让人眼花缭乱（人类读取 JSON 容易产生疲劳熵增）。
+工程建议：
+在人工审核关口，编写一个微型 Python 脚本，将当前的 JSON 转化为 YAML 格式或 Markdown 表格 展示给您。如果您修改了 YAML，脚本再反向解析为 JSON 保存。
+总结
+通过 Pydantic 强校验 拦截乱码，通过 ID 指针 拼装提示词防止特征遗忘，通过 滑动窗口 限制大模型的视野。这套数据流转机制，能让这个由 8 个模块组成的复杂流水线，像瑞士钟表一样精确且不知疲倦地运行。
