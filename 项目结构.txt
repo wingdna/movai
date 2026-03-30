@@ -1,0 +1,18 @@
+phantom_scroll/
+├── config/
+│   └── settings.py          # 配置（API密钥、风格定义）
+├── modules/
+│   ├── director_engine.py   # 模块2：总导演引擎
+│   └── writer_engine.py     # 模块3：执笔编剧引擎
+├── data/
+│   ├── input/               # 放 raw_source.json
+│   ├── output/              # 输出目录
+│   │   ├── project_bible.json
+│   │   ├── beat_sheet.json
+│   │   ├── master_script.json
+│   │   └── production_ledger.json
+│   └── state/               # 运行状态
+├── prompts/
+│   ├── director_system.txt  # 导演引擎系统提示词
+│   └── writer_system.txt    # 编剧引擎系统提示词
+└── run.py                   # 手动运行脚本
